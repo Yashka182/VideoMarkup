@@ -48,6 +48,9 @@ if not ok:
 h = w = 608
 initBB = None
 
+waitKeyDelay = 200
+useTracker = True
+
 frame_num = 1
 prev_mean = 0
 while ok and frame_num <= max_frames:
@@ -58,28 +61,36 @@ while ok and frame_num <= max_frames:
     name = f'{caseName}/' + fname  # + '_' + str(frames).zfill(4)
     origFrame = frame.copy()
 
-    key = cv2.waitKey(1) & 0xFF
+    cv2.namedWindow("Frame", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Frame", 1920, 1080)
+    if not useTracker:
+        cv2.imshow("Frame", frame)
+
+    key = cv2.waitKey(waitKeyDelay) & 0xFF
 
     # if the 's' key is selected, we are going to "select" a bounding
     # box to track
     if key == ord("s") or frame_num == 1 or frame_diff > thresh:
-        trackers = cv2.MultiTracker_create()
-        for i in range(max_obj):
-            # select the bounding box of the object we want to track (make
-            # sure you press ENTER or SPACE after selecting the ROI)
+        if(useTracker):
+            trackers = cv2.MultiTracker_create()
+            for i in range(max_obj):
+                # select the bounding box of the object we want to track (make
+                # sure you press ENTER or SPACE after selecting the ROI)
+                initBB = cv2.selectROI("Frame", frame, fromCenter=False)
+                # create a new object tracker for the bounding box and add it
+                # to our multi-object tracker
+                if initBB[2] == 0 or initBB[3] == 0:  # if no width or height
+                    break
+                # # start OpenCV object tracker using the supplied bounding box
+                tracker = cv2.TrackerCSRT_create()
+                trackers.add(tracker, frame, initBB)
+        else:
             initBB = cv2.selectROI("Frame", frame, fromCenter=False)
-            # create a new object tracker for the bounding box and add it
-            # to our multi-object tracker
-            if initBB[2] == 0 or initBB[3] == 0:  # if no width or height
-                break
-            # # start OpenCV object tracker using the supplied bounding box
-            tracker = cv2.TrackerCSRT_create()
-            trackers.add(tracker, frame, initBB)
 
     elif key == ord("q"):
         break
 
-    if initBB is not None:
+    if useTracker and initBB is not None:
         (tracking_ok, boxes) = trackers.update(frame)
 
         # save image and bounding box
@@ -89,7 +100,7 @@ while ok and frame_num <= max_frames:
                     for bbox in boxes:
                         p1 = (int(bbox[0]), int(bbox[1]))
                         p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
-                        cv2.rectangle(frame, p1, p2, (255, 0, 0), 2, 1)
+                        cv2.rectangle(frame, p1, p2, (0, 255, 0), 2, 1)
                         # centre = [0.5*(p1[1]+p2[1])/w, 0.5*(p1[0]+p2[0])/h]
                         # width, height = (bbox[3]/w, bbox[2]/h)ss
                         f.write(f'{frame_num} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}\n')
@@ -97,6 +108,19 @@ while ok and frame_num <= max_frames:
         else:
             initBB = None
 
+    if not useTracker:
+        with open(label_dir + f'/{fname}' + '.txt', 'a') as f:
+            p1 = (int(initBB[0]), int(initBB[1]))
+            p2 = (int(initBB[0] + initBB[2]), int(initBB[1] + initBB[3]))
+            cv2.rectangle(frame, p1, p2, (0, 255, 0), 2, 1)
+            # centre = [0.5*(p1[1]+p2[1])/w, 0.5*(p1[0]+p2[0])/h]
+            # width, height = (bbox[3]/w, bbox[2]/h)ss
+            f.write(f'{frame_num} {initBB[0]:.6f} {initBB[1]:.6f} {initBB[2]:.6f} {initBB[3]:.6f}\n')
+
+    cv2.imwrite(image_dir + f'/{frame_num}' + '.jpg', frame)
+
+    cv2.namedWindow("Frame", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Frame", 1920, 1080)
     cv2.imshow("Frame", frame)
 
     ok, frame = video.read()
